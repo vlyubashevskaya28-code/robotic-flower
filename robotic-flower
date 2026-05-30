@@ -1,0 +1,84 @@
+
+#include <IRremote.h>
+#define IR_RECEIVE_PIN 7
+
+#define IR_BUTTON_1 12
+#define IR_BUTTON_2 24
+
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+
+#define SERVOMIN 150
+#define SERVOMAX 300
+#define SERVO_FREQ 50
+
+const int NUM_SERVOS = 8;
+const int STEP_DELAY = 10;
+const int STEP_SIZE = 5;
+
+int currentPosition = -1; // -1 means uninitialized
+
+// Define LED pins
+const int ledPins[] = {13, 12, 8, 4, 2};
+const int NUM_LEDS = sizeof(ledPins) / sizeof(ledPins[0]);
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("Initializing 8 Servos and LEDs...");
+
+  pwm.begin();
+  pwm.setPWMFreq(SERVO_FREQ);
+
+  IrReceiver.begin(IR_RECEIVE_PIN);
+
+  // Set LED pins as outputs and turn them off initially
+  for (int i = 0; i < NUM_LEDS; i++) {
+    pinMode(ledPins[i], OUTPUT);
+    digitalWrite(ledPins[i], LOW);
+  }
+
+  delay(1000);
+}
+
+void loop() {
+  if (IrReceiver.decode()) {
+    int command = IrReceiver.decodedIRData.command;
+    Serial.print("Received IR command: ");
+    Serial.println(command);
+    IrReceiver.resume();
+
+    // Switched behavior: command 12 (IR_BUTTON_1) now moves to max and turns LEDs on
+    if (command == IR_BUTTON_1 && currentPosition != SERVOMAX) {
+      setLEDs(HIGH);  // Turn LEDs on before movement
+      moveServos(SERVOMIN, SERVOMAX);
+      currentPosition = SERVOMAX;
+      Serial.println("LEDs ON. Servos moved to maximum.");
+    }
+
+    // Switched behavior: command 24 (IR_BUTTON_2) now moves to min and turns LEDs off
+    else if (command == IR_BUTTON_2 && currentPosition != SERVOMIN) {
+      setLEDs(LOW);  // Turn LEDs off before movement
+      moveServos(SERVOMAX, SERVOMIN);
+      currentPosition = SERVOMIN;
+      Serial.println("LEDs OFF. Servos moved to minimum.");
+    }
+  }
+}
+
+void moveServos(int fromPos, int toPos) {
+  int step = (fromPos < toPos) ? STEP_SIZE : -STEP_SIZE;
+  for (int pos = fromPos; pos != toPos + step; pos += step) {
+    for (uint8_t servo = 0; servo < NUM_SERVOS; servo++) {
+      pwm.setPWM(servo, 0, pos);
+    }
+    delay(STEP_DELAY);
+  }
+}
+
+void setLEDs(int state) {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    digitalWrite(ledPins[i], state);
+  }
+}
